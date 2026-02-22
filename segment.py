@@ -834,7 +834,9 @@ def _ensure_foundation_checkpoints(config_path: Path, project_root: Path) -> Non
     if not gdino_ckpt.is_absolute():
         gdino_ckpt = (project_root / gdino_ckpt).resolve()
     if not gdino_ckpt.exists():
+        gdino_ckpt = (project_root / "pretrains" / "foundation_models" / "groundingdino_swint_ogc.pth").resolve()
         _download_file(GROUNDING_DINO_URL, gdino_ckpt)
+        cfg.foundation_model["grounded_checkpoint"] = str(gdino_ckpt)
 
     ram_ckpt = Path(cfg.foundation_model.get("ram_checkpoint"))
     if not ram_ckpt.is_absolute():
