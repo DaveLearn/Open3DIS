@@ -25,6 +25,7 @@ import numpy as np
 import torch
 import tyro
 import yaml
+import gdown
 import imageio.v2 as imageio
 import open3d as o3d
 from munch import Munch
@@ -43,6 +44,8 @@ from psdframe import Frame
 logger = logging.getLogger("open3dis-segmenter")
 
 SEGMENTATOR_DIR = Path(__file__).resolve().parent.parent / "SAI3D" / "Segmentator"
+ISBNET_SCANNET200_FILE_ID = "1ZEZgQeT6dIakljSTx4s5YZM0n2rwC3Kw"
+ISBNET_SCANNET200_FILENAME = "isbnet_scannet200.pth"
 
 
 @dataclass
@@ -797,8 +800,19 @@ def _run_isbnet_backbone(
     output_dir: Path,
     scene_id: str,
 ) -> Tuple[Path, Path]:
+    isbnet_root = project_root / "segmenter3d" / "ISBNet"
     if args.isbnet_checkpoint is None:
-        raise RuntimeError("ISBNet checkpoint required when enabling 3D proposals")
+        ckpt_dir = project_root / "pretrains" / "isbnet"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_path = ckpt_dir / ISBNET_SCANNET200_FILENAME
+        if not ckpt_path.exists():
+            logger.info("Downloading ISBNet checkpoint (ScanNet200) to %s", ckpt_path)
+            gdown.download(
+                id=ISBNET_SCANNET200_FILE_ID,
+                output=str(ckpt_path),
+                quiet=False,
+            )
+        args.isbnet_checkpoint = ckpt_path
 
     isbnet_root = project_root / "segmenter3d" / "ISBNet"
     cfg_path = _build_isbnet_config(

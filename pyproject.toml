@@ -54,6 +54,7 @@ dependencies = [
     "trimesh",
     "wandb",
     "yacs",
+    "gdown",
     # External segmenter CLI
     "tyro>=0.8.13",
 ]
