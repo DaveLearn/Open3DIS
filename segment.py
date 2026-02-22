@@ -20,6 +20,7 @@ import os
 import subprocess
 import sys
 import time
+import shutil
 
 import numpy as np
 import torch
@@ -576,6 +577,18 @@ def _sanitize_scene_id(raw_id: str) -> str:
     return cleaned or "scene"
 
 
+def _reset_open3dis_data_root(data_root: Path, dataset_mode: str) -> None:
+    if dataset_mode == "scannetpp":
+        dataset_name = "Scannetpp"
+    else:
+        dataset_name = "Scannet200"
+
+    target = data_root / dataset_name
+    if target.exists():
+        logger.info("Removing existing data folder %s", target)
+        shutil.rmtree(target)
+
+
 def _write_scene_files(
     frames: List[Frame],
     scene_id: str,
@@ -755,6 +768,7 @@ def _run_open3dis_pipeline(
         if result.returncode != 0:
             raise RuntimeError(f"Open3DIS command failed: {' '.join(cmd)}")
 
+    debug_dir.mkdir(parents=True, exist_ok=True)
     tracker_path = debug_dir / "tracker_2d.txt"
     if not tracker_path.exists():
         tracker_path.write_text("")
@@ -1080,6 +1094,7 @@ def run() -> None:
 
         data_root = project_root / "data"
         data_root.mkdir(parents=True, exist_ok=True)
+        _reset_open3dis_data_root(data_root, args.dataset_mode)
         split_3d = "test"
         scene_root_2d, original_ply_dir, superpoints_dir, groundtruth_dir, split_path = _write_scene_files(
             frames=frames,
