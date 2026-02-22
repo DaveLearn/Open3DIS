@@ -849,14 +849,15 @@ def _ensure_foundation_checkpoints(config_path: Path, project_root: Path) -> Non
     config_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
-def _ensure_nltk_data(output_dir: Path) -> None:
+def _ensure_nltk_data(project_root: Path) -> None:
     try:
         import nltk  # type: ignore
     except Exception as exc:
         raise RuntimeError("nltk not installed; install nltk") from exc
 
-    download_dir = output_dir / "nltk_data"
+    download_dir = project_root / "pretrains" / "nltk_data"
     download_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("NLTK_DATA", str(download_dir))
     nltk.data.path.append(str(download_dir))
 
     for resource in ("punkt", "averaged_perceptron_tagger"):
@@ -1153,7 +1154,7 @@ def run() -> None:
                 )
 
         _ensure_clip_weights(config_path)
-        _ensure_nltk_data(output_dir)
+        _ensure_nltk_data(project_root)
         _ensure_foundation_checkpoints(config_path, project_root)
 
         logger.info("Running Open3DIS pipeline")
