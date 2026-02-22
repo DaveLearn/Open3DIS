@@ -98,7 +98,7 @@ Two baselines are supported:
   - Run: `pixi run segment_external <observations.pkl> <scene.pkl>`
 - **2D+3D (upper-bound)**: uses ISBNet to generate 3D proposals and deep
   features (`dc_features`) for the superpoint path.
-  - Run: `pixi run segment_external <observations.pkl> <scene.pkl> --use-superpoints --use-3d-proposals --isbnet-checkpoint <ckpt.pth>`
+  - Run: `pixi run segment_external <observations.pkl> <scene.pkl> --use-superpoints --use-3d-proposals`
 
 Notes:
 
@@ -106,6 +106,11 @@ Notes:
 - If `--use-3d-proposals` or `--use-superpoints` is set and paths are not
   provided, the wrapper will run ISBNet automatically and then re-run
   Open3DIS with the generated `dc_features` and proposals.
+- If no `--isbnet-checkpoint` is provided, the wrapper will auto-download the
+  ScanNet200 ISBNet checkpoint to `pretrains/isbnet/isbnet_scannet200.pth`.
+- Debugging: set `OPEN3DIS_DEBUG=1` to save intermediate artifacts under
+  `<output_dir>/debug` (frames, meshes, superpoints, 2D masks, and
+  back-projected pixel masks).
 
 <!-- ## TODO
 Status | Name | Date

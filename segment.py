@@ -40,6 +40,8 @@ from initializerdefs import (
 )
 from psdframe import Frame
 
+from helpers.debug_visualize import DebugVisualizer
+
 
 logger = logging.getLogger("open3dis-segmenter")
 
@@ -57,7 +59,7 @@ class Args:
     """Path to the pickled SceneSetup."""
 
     dataset_mode: Literal["scannetpp", "scannet200"] = "scannetpp"
-    """Dataset mode for Open3DIS config."""
+    """Dataset mode for Open3DIS config. Default scannetpp for custom data."""
 
     use_3d_proposals: bool = False
     """Merge 3D proposals with 2D proposals (requires external 3D proposals)."""
@@ -732,7 +734,7 @@ def _build_open3dis_config(
 
 
 def _run_open3dis_pipeline(
-    project_root: Path, config_path: Path, work_dir: Path
+    project_root: Path, config_path: Path, work_dir: Path, debug_dir: Path
 ) -> None:
     env = os.environ.copy()
     env["PYTHONWARNINGS"] = "ignore"
@@ -743,6 +745,11 @@ def _run_open3dis_pipeline(
         result = subprocess.run(cmd, cwd=str(work_dir), env=env)
         if result.returncode != 0:
             raise RuntimeError(f"Open3DIS command failed: {' '.join(cmd)}")
+
+    tracker_path = debug_dir / "tracker_2d.txt"
+    if not tracker_path.exists():
+        tracker_path.write_text("")
+    env["TRACKER_2D_PATH"] = str(tracker_path)
 
     _run(
         [
@@ -934,6 +941,7 @@ def run() -> None:
             logger.info("Dataset has no id, using transient id")
             dataset.id = f"transient_{time.strftime('%Y%m%d-%H%M%S')}"
 
+
         scene_id = _sanitize_scene_id(dataset.id)
         project_root = Path(__file__).resolve().parent
         if args.output_dir is None:
@@ -942,16 +950,23 @@ def run() -> None:
             output_dir = args.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        debug_dir = output_dir / "debug"
+        dbg = DebugVisualizer(debug_dir)
+
         logger.info("Converting %d observation frames", len(dataset.frames))
         frames = [get_dataset_frame_from_observation_frame(f) for f in dataset.frames]
+        dbg.save_frames(frames)
 
         logger.info("Reconstructing TSDF mesh")
         mesh = _extract_mesh_bounded_with_res(frames, depth_trunc=2, mesh_res=1024)
         logger.info("Mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
+        dbg.save_mesh(mesh)
 
         workspace_voxels = get_workspace_voxels(scene)
+        dbg.save_workspace_voxels(workspace_voxels)
         mesh = _crop_mesh_to_workspace_bbox(mesh, workspace_voxels)
         logger.info("Cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
+        dbg.save_mesh(mesh, filename="mesh_tsdf_cropped.ply")
 
         data_root = output_dir / "data"
         data_root.mkdir(parents=True, exist_ok=True)
@@ -964,6 +979,15 @@ def run() -> None:
             k_thresh=args.k_thresh,
             seg_min_verts=args.seg_min_verts,
         )
+        if dbg.enabled:
+            superpoints_path = superpoints_dir / f"{scene_id}.pth"
+            if superpoints_path.exists():
+                superpoints = torch.load(superpoints_path)
+                if hasattr(superpoints, "cpu"):
+                    superpoints = superpoints.cpu().numpy()
+                else:
+                    superpoints = np.array(superpoints)
+                dbg.save_superpoints(mesh, superpoints)
 
         exp_dir = output_dir / "open3dis_exp"
         exp_dir.mkdir(parents=True, exist_ok=True)
@@ -983,10 +1007,6 @@ def run() -> None:
             rgb_dim=rgb_dim,
             output_dir=output_dir,
         )
-
-        tracker_2d_path = output_dir / "tracker_2d.txt"
-        if not tracker_2d_path.exists():
-            tracker_2d_path.write_text("")
 
         if args.use_3d_proposals or args.use_superpoints:
             dc_features_path = args.dc_features_path
@@ -1025,10 +1045,18 @@ def run() -> None:
 
         logger.info("Running Open3DIS pipeline")
         _run_open3dis_pipeline(
-            project_root=project_root, config_path=config_path, work_dir=output_dir
+            project_root=project_root,
+            config_path=config_path,
+            work_dir=output_dir,
+            debug_dir=debug_dir,
         )
 
         cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
+        if dbg.enabled:
+            mask2d_path = Path(cfg.exp.save_dir) / cfg.exp.exp_name / cfg.exp.mask2d_output / f"{scene_id}.pth"
+            if mask2d_path.exists():
+                mask_data = torch.load(mask2d_path)
+                dbg.save_masks_2d(frames, mask_data)
         cluster_path = (
             Path(cfg.exp.save_dir)
             / cfg.exp.exp_name
@@ -1057,6 +1085,8 @@ def run() -> None:
             raise RuntimeError("Open3DIS produced no instance masks")
 
         labels = _build_point_labels(masks, conf)
+        if dbg.enabled:
+            dbg.save_segmented_mesh(mesh, labels)
         mesh_vertices = np.asarray(mesh.vertices).astype(np.float32)
         labels = _filter_labels_by_workspace(mesh_vertices, labels, workspace_voxels)
 
@@ -1086,6 +1116,11 @@ def run() -> None:
             for name in instance_groups:
                 instance_groups[name][instance_groups[name] == table_id] = 0
 
+        vertex_labels_filtered = labels.copy()
+        vertex_labels_filtered[~np.isin(vertex_labels_filtered, valid_ids)] = 0
+        if dbg.enabled:
+            dbg.save_filtered_mesh(mesh, labels, vertex_labels_filtered, table_id, valid_ids)
+
         frame_ids: List[int] = []
         pixel_masks: List[np.ndarray] = []
         for obs_frame in dataset.frames:
@@ -1102,6 +1137,8 @@ def run() -> None:
         )
 
         objects = ObjectSegmentations(object_segmentations=instance_mask_objects)
+        if dbg.enabled:
+            dbg.save_pixel_masks(frames, instance_groups)
         output_path = output_dir / "objectsdef.pkl"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         objects.save(output_path)

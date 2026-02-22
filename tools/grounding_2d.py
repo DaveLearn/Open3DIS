@@ -76,18 +76,20 @@ if __name__ == "__main__":
             # Tracker
             done = False
             path = scene_id + ".pth"
-            with open("tracker_2d.txt", "r") as file:
-                lines = file.readlines()
-                lines = [line.strip() for line in lines]
-                for line in lines:
-                    if path in line:
-                        done = True
-                        break
+            tracker_path = os.environ.get("TRACKER_2D_PATH", "tracker_2d.txt")
+            if os.path.exists(tracker_path):
+                with open(tracker_path, "r") as file:
+                    lines = file.readlines()
+                    lines = [line.strip() for line in lines]
+                    for line in lines:
+                        if path in line:
+                            done = True
+                            break
             if done == True:
                 print("existed " + path)
                 continue
             # Write append each line
-            with open("tracker_2d.txt", "a") as file:
+            with open(tracker_path, "a") as file:
                 file.write(path + "\n")
             #####################################
             print("Process", scene_id)
