@@ -59,6 +59,18 @@ class Args:
     use_3d_proposals: bool = False
     """Merge 3D proposals with 2D proposals (requires external 3D proposals)."""
 
+    use_superpoints: bool = False
+    """Use superpoints in Open3DIS clustering (requires dc_features)."""
+
+    dc_features_path: Optional[Path] = None
+    """Override path to dc_features folder (.pth files)."""
+
+    isbnet_config: Optional[Path] = None
+    """Optional ISBNet config override for 3D backbone."""
+
+    isbnet_checkpoint: Optional[Path] = None
+    """ISBNet checkpoint for generating 3D proposals + dc_features."""
+
     cls_agnostic_3d_proposals_path: Optional[Path] = None
     """Override path to class-agnostic 3D proposals (.pth files)."""
 
@@ -558,11 +570,11 @@ def _write_scene_files(
     scene_id: str,
     mesh: o3d.geometry.TriangleMesh,
     dataset_mode: str,
-    output_dir: Path,
+    data_root: Path,
     k_thresh: float,
     seg_min_verts: int,
 ) -> Tuple[Path, Path, Path, Path, Path]:
-    dataset_root = output_dir / "data"
+    dataset_root = data_root
     if dataset_mode == "scannetpp":
         dataset_name = "Scannetpp"
         dataset_2d_name = "Scannetpp_2D_5interval"
@@ -637,7 +649,7 @@ def _write_scene_files(
     groundtruth_path = groundtruth_dir / f"{scene_id}.pth"
     torch.save((vertices, colors, sem_gt, inst_gt), groundtruth_path)
 
-    split_path = output_dir / "scenes.txt"
+    split_path = data_root.parent / "scenes.txt"
     split_path.write_text(f"{scene_id}\n")
 
     return scene_2d_root.parent, original_ply_dir, superpoints_dir, groundtruth_dir, split_path
@@ -678,15 +690,20 @@ def _build_open3dis_config(
         cfg["data"]["cls_agnostic_3d_proposals_path"] = str(
             args.cls_agnostic_3d_proposals_path
         )
+    if args.dc_features_path is not None:
+        cfg["data"]["dc_features_path"] = str(args.dc_features_path)
 
     cfg["exp"]["save_dir"] = str(exp_dir)
     cfg["exp"]["exp_name"] = args.exp_name
     cfg["exp"]["mask2d_output"] = args.mask2d_output
 
-    cfg["final_instance"]["spp_level"] = False
+    cfg["final_instance"]["spp_level"] = bool(args.use_superpoints)
     cfg["proposals"]["p2d"] = True
     cfg["proposals"]["p3d"] = bool(args.use_3d_proposals)
     cfg["proposals"]["agnostic"] = True
+
+    if args.use_3d_proposals:
+        cfg["cluster"]["simi"] = max(cfg["cluster"].get("simi", 0.0), 0.9)
 
     def _abs_path(path_value: str) -> str:
         path = Path(path_value)
@@ -740,6 +757,93 @@ def _run_open3dis_pipeline(
             str(config_path),
         ]
     )
+
+
+def _build_isbnet_config(
+    project_root: Path,
+    args: Args,
+    dataset_mode: str,
+    groundtruth_dir: Path,
+    output_dir: Path,
+) -> Path:
+    if args.isbnet_config is not None:
+        template_path = args.isbnet_config
+    else:
+        if dataset_mode == "scannetpp":
+            template_path = project_root / "segmenter3d" / "ISBNet" / "configs" / "scannetpp" / "isbnet_scannetpp.yaml"
+        else:
+            template_path = project_root / "segmenter3d" / "ISBNet" / "configs" / "scannet200" / "isbnet_scannet200.yaml"
+
+    cfg = yaml.safe_load(template_path.read_text())
+
+    data_root = str(groundtruth_dir.parent)
+    cfg["data"]["train"]["data_root"] = data_root
+    cfg["data"]["test"]["data_root"] = data_root
+    cfg["data"]["train"]["prefix"] = "groundtruth"
+    cfg["data"]["test"]["prefix"] = "groundtruth"
+    cfg["data"]["train"]["suffix"] = ".pth"
+    cfg["data"]["test"]["suffix"] = ".pth"
+
+    cfg_path = output_dir / "isbnet_config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    return cfg_path
+
+
+def _run_isbnet_backbone(
+    project_root: Path,
+    args: Args,
+    dataset_mode: str,
+    groundtruth_dir: Path,
+    output_dir: Path,
+    scene_id: str,
+) -> Tuple[Path, Path]:
+    if args.isbnet_checkpoint is None:
+        raise RuntimeError("ISBNet checkpoint required when enabling 3D proposals")
+
+    isbnet_root = project_root / "segmenter3d" / "ISBNet"
+    cfg_path = _build_isbnet_config(
+        project_root=project_root,
+        args=args,
+        dataset_mode=dataset_mode,
+        groundtruth_dir=groundtruth_dir,
+        output_dir=output_dir,
+    )
+
+    env = os.environ.copy()
+    env["PYTHONWARNINGS"] = "ignore"
+    env["PYTHONPATH"] = f"{isbnet_root}:{env.get('PYTHONPATH', '')}"
+
+    def _run(cmd: List[str]) -> None:
+        logger.info("Running: %s", " ".join(cmd))
+        result = subprocess.run(cmd, cwd=str(isbnet_root), env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"ISBNet command failed: {' '.join(cmd)}")
+
+    if dataset_mode == "scannetpp":
+        dc_features_path = project_root / "data" / "Scannetpp" / "Scannetpp_3D" / "test" / "dc_feat_scannetpp"
+        proposals_path = project_root / "data" / "Scannetpp" / "Scannetpp_3D" / "test" / "isbnet_clsagnostic_scannetpp"
+    else:
+        dc_features_path = project_root / "data" / "Scannet200" / "Scannet200_3D" / "val" / "dc_feat_scannet200"
+        proposals_path = project_root / "data" / "Scannet200" / "Scannet200_3D" / "val" / "isbnet_clsagnostic_scannet200"
+
+    dc_features_path.mkdir(parents=True, exist_ok=True)
+    proposals_path.mkdir(parents=True, exist_ok=True)
+
+    _run(
+        [
+            "python3",
+            "tools/test.py",
+            str(cfg_path),
+            str(args.isbnet_checkpoint),
+        ]
+    )
+
+    if not (dc_features_path / f"{scene_id}.pth").exists():
+        raise RuntimeError(f"ISBNet did not produce dc_features for {scene_id}")
+    if not (proposals_path / f"{scene_id}.pth").exists():
+        raise RuntimeError(f"ISBNet did not produce 3D proposals for {scene_id}")
+
+    return dc_features_path, proposals_path
 
 
 def _load_open3dis_instances(
@@ -835,12 +939,14 @@ def run() -> None:
         mesh = _crop_mesh_to_workspace_bbox(mesh, workspace_voxels)
         logger.info("Cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
 
+        data_root = output_dir / "data"
+        data_root.mkdir(parents=True, exist_ok=True)
         scene_root_2d, original_ply_dir, superpoints_dir, groundtruth_dir, split_path = _write_scene_files(
             frames=frames,
             scene_id=scene_id,
             mesh=mesh,
             dataset_mode=args.dataset_mode,
-            output_dir=output_dir,
+            data_root=data_root,
             k_thresh=args.k_thresh,
             seg_min_verts=args.seg_min_verts,
         )
@@ -867,6 +973,41 @@ def run() -> None:
         tracker_2d_path = output_dir / "tracker_2d.txt"
         if not tracker_2d_path.exists():
             tracker_2d_path.write_text("")
+
+        if args.use_3d_proposals or args.use_superpoints:
+            dc_features_path = args.dc_features_path
+            proposals_3d_path_override = args.cls_agnostic_3d_proposals_path
+            needs_dc = args.use_superpoints and dc_features_path is None
+            needs_props = args.use_3d_proposals and proposals_3d_path_override is None
+            if (needs_dc or needs_props) and args.isbnet_checkpoint is None:
+                raise RuntimeError("ISBNet checkpoint required when enabling 3D proposals or superpoints")
+
+            if needs_dc or needs_props:
+                logger.info("Running ISBNet to produce dc_features and 3D proposals")
+                dc_features_path, proposals_3d_path_override = _run_isbnet_backbone(
+                    project_root=project_root,
+                    args=args,
+                    dataset_mode=args.dataset_mode,
+                    groundtruth_dir=groundtruth_dir,
+                    output_dir=output_dir,
+                    scene_id=scene_id,
+                )
+                args.dc_features_path = dc_features_path
+                args.cls_agnostic_3d_proposals_path = proposals_3d_path_override
+
+                config_path = _build_open3dis_config(
+                    args,
+                    scene_id=scene_id,
+                    scene_root_2d=scene_root_2d,
+                    original_ply_dir=original_ply_dir,
+                    superpoints_dir=superpoints_dir,
+                    groundtruth_dir=groundtruth_dir,
+                    split_path=split_path,
+                    exp_dir=exp_dir,
+                    img_dim=img_dim,
+                    rgb_dim=rgb_dim,
+                    output_dir=output_dir,
+                )
 
         logger.info("Running Open3DIS pipeline")
         _run_open3dis_pipeline(
