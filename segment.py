@@ -582,6 +582,8 @@ def _write_scene_files(
     mesh: o3d.geometry.TriangleMesh,
     dataset_mode: str,
     data_root: Path,
+    split_3d: str,
+    split_path_root: Path,
     k_thresh: float,
     seg_min_verts: int,
 ) -> Tuple[Path, Path, Path, Path, Path]:
@@ -596,7 +598,7 @@ def _write_scene_files(
         dataset_3d_name = "Scannet200_3D"
 
     scene_2d_root = dataset_root / dataset_name / dataset_2d_name / "val" / scene_id
-    scene_3d_root = dataset_root / dataset_name / dataset_3d_name / "val"
+    scene_3d_root = dataset_root / dataset_name / dataset_3d_name / split_3d
 
     color_dir = scene_2d_root / "color"
     depth_dir = scene_2d_root / "depth"
@@ -660,7 +662,7 @@ def _write_scene_files(
     groundtruth_path = groundtruth_dir / f"{scene_id}.pth"
     torch.save((vertices, colors, sem_gt, inst_gt), groundtruth_path)
 
-    split_path = data_root.parent / "scenes.txt"
+    split_path = split_path_root / "scenes.txt"
     split_path.write_text(f"{scene_id}\n")
 
     return scene_2d_root.parent, original_ply_dir, superpoints_dir, groundtruth_dir, split_path
@@ -696,6 +698,7 @@ def _build_open3dis_config(
     cfg["data"]["img_dim"] = [int(img_dim[0]), int(img_dim[1])]
     cfg["data"]["rgb_img_dim"] = [int(rgb_dim[0]), int(rgb_dim[1])]
     cfg["data"]["img_interval"] = int(args.img_interval)
+    cfg["data"]["dataset_name"] = "scannetpp"
 
     if args.cls_agnostic_3d_proposals_path is not None:
         cfg["data"]["cls_agnostic_3d_proposals_path"] = str(
@@ -886,6 +889,8 @@ def _build_isbnet_config(
     cfg["data"]["test"]["prefix"] = "groundtruth"
     cfg["data"]["train"]["suffix"] = ".pth"
     cfg["data"]["test"]["suffix"] = ".pth"
+    cfg["data"]["train"]["type"] = dataset_mode
+    cfg["data"]["test"]["type"] = dataset_mode
 
     cfg_path = output_dir / "isbnet_config.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
@@ -958,7 +963,6 @@ def _run_isbnet_backbone(
             "tools/test.py",
             str(cfg_path),
             str(args.isbnet_checkpoint),
-            "--only_backbone",
         ]
     )
 
@@ -1071,14 +1075,17 @@ def run() -> None:
         logger.info("Cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
         dbg.save_mesh(mesh, filename="mesh_tsdf_cropped.ply")
 
-        data_root = output_dir / "data"
+        data_root = project_root / "data"
         data_root.mkdir(parents=True, exist_ok=True)
+        split_3d = "test"
         scene_root_2d, original_ply_dir, superpoints_dir, groundtruth_dir, split_path = _write_scene_files(
             frames=frames,
             scene_id=scene_id,
             mesh=mesh,
             dataset_mode=args.dataset_mode,
             data_root=data_root,
+            split_3d=split_3d,
+            split_path_root=output_dir,
             k_thresh=args.k_thresh,
             seg_min_verts=args.seg_min_verts,
         )

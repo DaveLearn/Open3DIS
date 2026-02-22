@@ -112,6 +112,12 @@ Notes:
   `<output_dir>/debug` (frames, meshes, superpoints, 2D masks, and
   back-projected pixel masks).
 
+Local data layout:
+
+- All generated data and checkpoints are stored under `data/` and
+  `pretrains/` inside the Open3DIS repo. Add those paths to `.gitignore`
+  as needed.
+
 <!-- ## TODO
 Status | Name | Date
 :---:| --- | ---

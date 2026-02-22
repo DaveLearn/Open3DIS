@@ -481,12 +481,15 @@ class ISBNet(nn.Module):
         
         if self.dataset_name == "scannet200":
             save_path = os.path.join("../../data/Scannet200/Scannet200_3D/val/dc_feat_scannet200", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save((voxel_mask_features[v2p_map.long()].cpu()), save_path)
         if self.dataset_name == "scannetpp":
             save_path = os.path.join("../../data/Scannetpp/Scannetpp_3D/test/dc_feat_scannetpp", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save((voxel_mask_features[v2p_map.long()].cpu()), save_path)
         if self.dataset_name == "arkitscenes":
             save_path = os.path.join("../../data/ArkitScenes/dc_feat_arkitscenes", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save((voxel_mask_features[v2p_map.long()].cpu()), save_path)
         # ../../../Dataset/ArkitScenes
 
@@ -640,24 +643,21 @@ class ISBNet(nn.Module):
         if self.dataset_name == "scannet200":
             saved_masks = [m["pred_mask"] for m in pred_instances]
             saved_confs = [m["conf"] for m in pred_instances]
-            torch.save(
-                {"ins": saved_masks, "conf": saved_confs},
-                os.path.join("../../data/Scannet200/Scannet200_3D/val/isbnet_clsagnostic_scannet200", scan_ids[0] + ".pth"),
-            )
+            save_path = os.path.join("../../data/Scannet200/Scannet200_3D/val/isbnet_clsagnostic_scannet200", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save({"ins": saved_masks, "conf": saved_confs}, save_path)
         if self.dataset_name == "scannetpp":           
             saved_masks = [m["pred_mask"] for m in pred_instances]
             saved_confs = [m["conf"] for m in pred_instances]
-            torch.save(
-                {"ins": saved_masks, "conf": saved_confs},
-                os.path.join("../../data/Scannetpp/Scannetpp_3D/test/isbnet_clsagnostic_scannetpp", scan_ids[0] + ".pth"),
-            )
+            save_path = os.path.join("../../data/Scannetpp/Scannetpp_3D/test/isbnet_clsagnostic_scannetpp", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save({"ins": saved_masks, "conf": saved_confs}, save_path)
         if self.dataset_name == "arkitscenes":           
             saved_masks = [m["pred_mask"] for m in pred_instances]
             saved_confs = [m["conf"] for m in pred_instances]
-            torch.save(
-                {"ins": saved_masks, "conf": saved_confs},
-                os.path.join("../../data/ArkitScenes/isbnet_clsagnostic_arkitscenes", scan_ids[0] + ".pth"),
-            )            
+            save_path = os.path.join("../../data/ArkitScenes/isbnet_clsagnostic_arkitscenes", scan_ids[0] + ".pth")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save({"ins": saved_masks, "conf": saved_confs}, save_path)           
         # ../../../Dataset/ArkitScenes
         return ret
 
