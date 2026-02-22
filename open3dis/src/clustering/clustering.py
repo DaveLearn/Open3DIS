@@ -690,7 +690,7 @@ def process_hierarchical_agglomerative_nospp(
     while(int(maxlevel // len(ious_level)) == 0):
         ious_level = ious_level[1:]
     inter = int(maxlevel // len(ious_level))
-    point_acc = torch.zeros((n_points), dtype=int)
+    point_acc = torch.zeros((n_points), dtype=torch.int64, device="cuda")
     
     groups = hierarchical_agglomerative_clustering_nospp(pcd_list, 0, len(pcd_list) - 1, n_points, ious_level, level, inter, point_acc, iterative=iterative)
     ###
