@@ -985,8 +985,13 @@ def _run_isbnet_backbone(
 
     if not (dc_features_path / f"{scene_id}.pth").exists():
         raise RuntimeError(f"ISBNet did not produce dc_features for {scene_id}")
-    if not (proposals_path / f"{scene_id}.pth").exists():
-        raise RuntimeError(f"ISBNet did not produce 3D proposals for {scene_id}")
+    proposals_file = proposals_path / f"{scene_id}.pth"
+    if not proposals_file.exists():
+        logger.warning(
+            "ISBNet produced no 3D proposals for %s; writing empty proposals",
+            scene_id,
+        )
+        torch.save({"ins": [], "conf": []}, proposals_file)
 
     return dc_features_path, proposals_path
 
