@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 
@@ -8,7 +8,7 @@ if __name__ == "__main__":
         version="1.0",
         description="isbnet",
         author="Tuan Ngo",
-        packages=["isbnet"],
+        packages=find_packages(),
         package_data={"isbnet.ops": ["*/*.so"]},
         ext_modules=[
             CUDAExtension(

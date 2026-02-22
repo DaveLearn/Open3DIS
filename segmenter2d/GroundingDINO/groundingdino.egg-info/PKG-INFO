@@ -206,8 +206,14 @@ License:                                  Apache License
            See the License for the specific language governing permissions and
            limitations under the License.
         
-Platform: UNKNOWN
 License-File: LICENSE
-
-UNKNOWN
-
+Requires-Dist: torch
+Requires-Dist: torchvision
+Requires-Dist: transformers
+Requires-Dist: addict
+Requires-Dist: yapf
+Requires-Dist: timm
+Requires-Dist: numpy
+Requires-Dist: opencv-python
+Requires-Dist: supervision
+Requires-Dist: pycocotools

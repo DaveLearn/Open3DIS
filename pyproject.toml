@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "open3dis"
+version = "0.1.0"
+description = "Open-Vocabulary 3D Instance Segmentation with 2D Mask Guidance"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    # Core
+    "torch==2.1.2",
+    "torchvision==0.16.2",
+    "spconv-cu121",
+    "torch-scatter",
+    "opencv-python",
+    "scikit-image",
+    "open3d",
+    "imageio",
+    "plyfile",
+    "munch",
+    "pandas",
+    "pyyaml",
+    "scikit-learn",
+    "scipy",
+    "six",
+    "tensorboard",
+    "tensorboardX",
+    "tqdm",
+    "numpy",
+    # additional requirements
+    "absl-py",
+    "addict",
+    "albumentations",
+    "beautifulsoup4",
+    "dash",
+    "einops",
+    "filelock",
+    "fire",
+    "Flask",
+    "h5py",
+    "huggingface-hub",
+    "hydra-core",
+    "networkx",
+    "ninja",
+    "omegaconf",
+    "plotly",
+    "psutil",
+    "requests",
+    "shapely",
+    "timm",
+    "transformers<4.45",
+    "trimesh",
+    "wandb",
+    "yacs",
+]
+
+[tool.pixi.workspace]
+channels = ["nvidia", "conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+cuda-version = "12.1.*"
+cuda = ">=12.1,<12.2"
+cuda-toolkit = "12.1.*"
+geos = ">=3.14.1,<4"
+gcc = "11.*"
+gxx = "11.*"
+sparsehash = ">=2.0.4"
+setuptools = "<70"
+wheel = "*"
+ca-certificates = ">=2026.1.4,<2027"
+certifi = ">=2026.1.4,<2027"
+
+[tool.pixi.pypi-options.dependency-overrides]
+numpy = "<2.0"
+
+[tool.pixi.pypi-dependencies]
+isbnet = { path = "./segmenter3d/ISBNet", editable = false }
+pointnet2 = { path = "./segmenter3d/ISBNet/isbnet/pointnet2", editable = false }
+groundingdino = { path = "./segmenter2d/GroundingDINO", editable = false }
+segment-anything = { path = "./segmenter2d/segment_anything", editable = false }
+detectron2 = { path="./detectron2", editable = false }
+# clip = { git = "https://github.com/facebookresearch/ov-seg.git", subdirectory = "third_party/CLIP" }
+
+[tool.pixi.pypi-options]
+index-url = "https://pypi.org/simple"
+find-links = [{url = "https://data.pyg.org/whl/torch-2.1.2+cu121.html"}]
+no-build-isolation = ["detectron2", "isbnet", "pointnet2", "groundingdino", "segment-anything"]
+
+[tool.pixi.activation.env]
+CPATH = "${PIXI_PROJECT_ROOT}/.pixi/envs/default/include:${PIXI_PROJECT_ROOT}/.pixi/envs/default/targets/x86_64-linux/include"
+CUDA_HOME = "${PIXI_PROJECT_ROOT}/.pixi/envs/default"
+
+[tool.pixi.tasks]
