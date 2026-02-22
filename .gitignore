@@ -117,3 +117,5 @@ results/
 
 # *.o
 # SegmentAnything3D/libs/pointops/build/
+outputs/
+test_data/

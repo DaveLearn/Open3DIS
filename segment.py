@@ -769,6 +769,25 @@ def _run_open3dis_pipeline(
     )
 
 
+def _ensure_clip_weights(config_path: Path) -> None:
+    cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
+    clip_model = None
+    if hasattr(cfg, "foundation_model"):
+        clip_model = cfg.foundation_model.get("clip_model")
+    if not clip_model:
+        logger.info("No CLIP model specified in config; skipping CLIP download")
+        return
+
+    try:
+        import clip  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("OpenAI CLIP not installed; install openai-clip") from exc
+
+    logger.info("Ensuring CLIP weights for model %s", clip_model)
+    model, _ = clip.load(clip_model, device="cpu")
+    del model
+
+
 def _build_isbnet_config(
     project_root: Path,
     args: Args,
@@ -1042,6 +1061,8 @@ def run() -> None:
                     rgb_dim=rgb_dim,
                     output_dir=output_dir,
                 )
+
+        _ensure_clip_weights(config_path)
 
         logger.info("Running Open3DIS pipeline")
         _run_open3dis_pipeline(

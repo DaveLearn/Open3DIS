@@ -55,6 +55,7 @@ dependencies = [
     "wandb",
     "yacs",
     "gdown",
+    "openai-clip",
     # External segmenter CLI
     "tyro>=0.8.13",
 ]
