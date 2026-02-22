@@ -81,7 +81,7 @@ isbnet = { path = "./segmenter3d/ISBNet", editable = false }
 pointnet2 = { path = "./segmenter3d/ISBNet/isbnet/pointnet2", editable = false }
 groundingdino = { path = "./segmenter2d/GroundingDINO", editable = false }
 segment-anything = { path = "./segmenter2d/segment_anything", editable = false }
-detectron2 = { path="./detectron2", editable = false }
+detectron2 = { git = "https://github.com/MaureenZOU/detectron2-xyz.git" }
 # clip = { git = "https://github.com/facebookresearch/ov-seg.git", subdirectory = "third_party/CLIP" }
 
 [tool.pixi.pypi-options]
