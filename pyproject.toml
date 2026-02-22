@@ -43,6 +43,7 @@ dependencies = [
     "huggingface-hub",
     "hydra-core",
     "networkx",
+    "nltk",
     "ninja",
     "omegaconf",
     "plotly",
@@ -56,6 +57,7 @@ dependencies = [
     "yacs",
     "gdown",
     "openai-clip",
+    "certifi",
     # External segmenter CLI
     "tyro>=0.8.13",
 ]
@@ -85,6 +87,7 @@ isbnet = { path = "./segmenter3d/ISBNet", editable = false }
 pointnet2 = { path = "./segmenter3d/ISBNet/isbnet/pointnet2", editable = false }
 groundingdino = { path = "./segmenter2d/GroundingDINO", editable = false }
 segment-anything = { path = "./segmenter2d/segment_anything", editable = false }
+ram = { path = "./segmenter2d/recognize-anything", editable = false }
 detectron2 = { git = "https://github.com/MaureenZOU/detectron2-xyz.git" }
 # External segmenter deps
 psdframe = { git = "ssh://git@github.com/DaveLearn/deg.git", tag="initializerdefs/v0.5.1", subdirectory = "packages/psdframe" }

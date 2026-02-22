@@ -26,6 +26,8 @@ import torch
 import tyro
 import yaml
 import gdown
+import certifi
+import requests
 import imageio.v2 as imageio
 import open3d as o3d
 from munch import Munch
@@ -48,6 +50,9 @@ logger = logging.getLogger("open3dis-segmenter")
 SEGMENTATOR_DIR = Path(__file__).resolve().parent.parent / "SAI3D" / "Segmentator"
 ISBNET_SCANNET200_FILE_ID = "1ZEZgQeT6dIakljSTx4s5YZM0n2rwC3Kw"
 ISBNET_SCANNET200_FILENAME = "isbnet_scannet200.pth"
+SAM_CHECKPOINT_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+GROUNDING_DINO_URL = "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"
+RAM_PLUS_URL = "https://huggingface.co/xinyu1205/recognize-anything-plus-model/resolve/main/ram_plus_swin_large_14m.pth"
 
 
 @dataclass
@@ -788,6 +793,68 @@ def _ensure_clip_weights(config_path: Path) -> None:
     del model
 
 
+def _download_file(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        return
+    logger.info("Downloading %s -> %s", url, destination)
+    with requests.get(url, stream=True, timeout=120) as response:
+        response.raise_for_status()
+        with open(destination, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+
+def _ensure_foundation_checkpoints(config_path: Path, project_root: Path) -> None:
+    cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
+    if not hasattr(cfg, "foundation_model"):
+        return
+
+    cert = certifi.where()
+    os.environ.setdefault("SSL_CERT_FILE", cert)
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", cert)
+
+    base_dir = project_root / "pretrains" / "foundation_models"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    sam_ckpt = Path(cfg.foundation_model.get("sam_checkpoint"))
+    if not sam_ckpt.is_absolute():
+        sam_ckpt = (project_root / sam_ckpt).resolve()
+    if not sam_ckpt.exists():
+        _download_file(SAM_CHECKPOINT_URL, sam_ckpt)
+
+    gdino_ckpt = Path(cfg.foundation_model.get("grounded_checkpoint"))
+    if not gdino_ckpt.is_absolute():
+        gdino_ckpt = (project_root / gdino_ckpt).resolve()
+    if not gdino_ckpt.exists():
+        _download_file(GROUNDING_DINO_URL, gdino_ckpt)
+
+    ram_ckpt = Path(cfg.foundation_model.get("ram_checkpoint"))
+    if not ram_ckpt.is_absolute():
+        ram_ckpt = (project_root / ram_ckpt).resolve()
+    if not ram_ckpt.exists():
+        _download_file(RAM_PLUS_URL, ram_ckpt)
+
+
+def _ensure_nltk_data(output_dir: Path) -> None:
+    try:
+        import nltk  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("nltk not installed; install nltk") from exc
+
+    download_dir = output_dir / "nltk_data"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    nltk.data.path.append(str(download_dir))
+
+    for resource in ("punkt", "averaged_perceptron_tagger"):
+        try:
+            nltk.data.find(f"tokenizers/{resource}")
+        except LookupError:
+            logger.info("Downloading NLTK resource: %s", resource)
+            nltk.download(resource, download_dir=str(download_dir), quiet=True)
+
+
 def _build_isbnet_config(
     project_root: Path,
     args: Args,
@@ -1063,6 +1130,8 @@ def run() -> None:
                 )
 
         _ensure_clip_weights(config_path)
+        _ensure_nltk_data(output_dir)
+        _ensure_foundation_checkpoints(config_path, project_root)
 
         logger.info("Running Open3DIS pipeline")
         _run_open3dis_pipeline(

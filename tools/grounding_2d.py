@@ -6,12 +6,6 @@ import numpy as np
 from munch import Munch
 from tqdm import tqdm, trange
 
-# Util
-from util2d.grounded_sam import Grounded_Sam # Grounded SAM
-from util2d.ram_grounded_sam import RAM_Grounded_Sam # RAM Grounded SAM
-from util2d.yoloworld_sam import YOLOWorld_SAM # YOLO-World SAM
-from util2d.ram_yoloworld_sam import RAM_YOLOWorld_SAM # RAM YOLO-World SAM
-
 from util2d.util import masks_to_rle
 
 from open3dis.dataset.scannet200 import INSTANCE_CAT_SCANNET_200 # Scannet200
@@ -54,15 +48,21 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unknown dataset: {cfg.data.dataset_name}")
 
-    # Fondation model loader
+    # Foundation model loader (lazy import to avoid unused deps)
     if cfg.segmenter2d.model == 'Grounded-SAM':
+        from util2d.grounded_sam import Grounded_Sam
         model = Grounded_Sam(cfg)
     elif cfg.segmenter2d.model == 'RAM Grounded-SAM':
+        from util2d.ram_grounded_sam import RAM_Grounded_Sam
         model = RAM_Grounded_Sam(cfg)
     elif cfg.segmenter2d.model == 'YoloW-SAM':
+        from util2d.yoloworld_sam import YOLOWorld_SAM
         model = YOLOWorld_SAM(cfg)
     elif cfg.segmenter2d.model == 'RAM YoloW-SAM':
+        from util2d.ram_yoloworld_sam import RAM_YOLOWorld_SAM
         model = RAM_YOLOWorld_SAM(cfg)
+    else:
+        raise ValueError(f"Unknown segmenter2d model: {cfg.segmenter2d.model}")
 
     # Directory Init
     save_dir = os.path.join(cfg.exp.save_dir, cfg.exp.exp_name, cfg.exp.mask2d_output)

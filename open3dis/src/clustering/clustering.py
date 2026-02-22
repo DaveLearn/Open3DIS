@@ -8,7 +8,10 @@ import cv2
 import numpy as np
 import open3d as o3d
 import pycocotools
-import pyviz3d.visualizer as viz
+try:
+    import pyviz3d.visualizer as viz
+except Exception:  # optional dependency (visualization only)
+    viz = None
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
