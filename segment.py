@@ -51,6 +51,7 @@ SEGMENTATOR_DIR = Path(__file__).resolve().parent.parent / "SAI3D" / "Segmentato
 ISBNET_SCANNET200_FILE_ID = "1ZEZgQeT6dIakljSTx4s5YZM0n2rwC3Kw"
 ISBNET_SCANNET200_FILENAME = "isbnet_scannet200.pth"
 SAM_CHECKPOINT_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+SAM_CHECKPOINT_FILENAME = "sam_vit_h_4b8939.pth"
 GROUNDING_DINO_URL = "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"
 RAM_PLUS_URL = "https://huggingface.co/xinyu1205/recognize-anything-plus-model/resolve/main/ram_plus_swin_large_14m.pth"
 
@@ -646,7 +647,7 @@ def _write_scene_files(
     seg_ids = np.unique(seg_ids, return_inverse=True)[1]
 
     superpoints_path = superpoints_dir / f"{scene_id}.pth"
-    torch.save(torch.from_numpy(seg_ids), superpoints_path)
+    torch.save(seg_ids.astype(np.int32), superpoints_path)
 
     vertices = np.asarray(mesh.vertices).astype(np.float32)
     colors = np.asarray(mesh.vertex_colors)
@@ -822,7 +823,9 @@ def _ensure_foundation_checkpoints(config_path: Path, project_root: Path) -> Non
     if not sam_ckpt.is_absolute():
         sam_ckpt = (project_root / sam_ckpt).resolve()
     if not sam_ckpt.exists():
+        sam_ckpt = (project_root / "pretrains" / "foundation_models" / SAM_CHECKPOINT_FILENAME).resolve()
         _download_file(SAM_CHECKPOINT_URL, sam_ckpt)
+        cfg.foundation_model["sam_checkpoint"] = str(sam_ckpt)
 
     gdino_ckpt = Path(cfg.foundation_model.get("grounded_checkpoint"))
     if not gdino_ckpt.is_absolute():
@@ -834,7 +837,11 @@ def _ensure_foundation_checkpoints(config_path: Path, project_root: Path) -> Non
     if not ram_ckpt.is_absolute():
         ram_ckpt = (project_root / ram_ckpt).resolve()
     if not ram_ckpt.exists():
+        ram_ckpt = (project_root / "pretrains" / "foundation_models" / "ram_plus_swin_large_14m.pth").resolve()
         _download_file(RAM_PLUS_URL, ram_ckpt)
+        cfg.foundation_model["ram_checkpoint"] = str(ram_ckpt)
+
+    config_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
 def _ensure_nltk_data(output_dir: Path) -> None:
@@ -926,6 +933,15 @@ def _run_isbnet_backbone(
         if result.returncode != 0:
             raise RuntimeError(f"ISBNet command failed: {' '.join(cmd)}")
 
+    data_link = project_root / "data"
+    if data_link.is_symlink():
+        target = data_link.readlink()
+        if not target.is_absolute():
+            target = (data_link.parent / target).resolve()
+        target.mkdir(parents=True, exist_ok=True)
+    else:
+        data_link.mkdir(parents=True, exist_ok=True)
+
     if dataset_mode == "scannetpp":
         dc_features_path = project_root / "data" / "Scannetpp" / "Scannetpp_3D" / "test" / "dc_feat_scannetpp"
         proposals_path = project_root / "data" / "Scannetpp" / "Scannetpp_3D" / "test" / "isbnet_clsagnostic_scannetpp"
@@ -942,6 +958,7 @@ def _run_isbnet_backbone(
             "tools/test.py",
             str(cfg_path),
             str(args.isbnet_checkpoint),
+            "--only_backbone",
         ]
     )
 
@@ -1099,9 +1116,6 @@ def run() -> None:
             proposals_3d_path_override = args.cls_agnostic_3d_proposals_path
             needs_dc = args.use_superpoints and dc_features_path is None
             needs_props = args.use_3d_proposals and proposals_3d_path_override is None
-            if (needs_dc or needs_props) and args.isbnet_checkpoint is None:
-                raise RuntimeError("ISBNet checkpoint required when enabling 3D proposals or superpoints")
-
             if needs_dc or needs_props:
                 logger.info("Running ISBNet to produce dc_features and 3D proposals")
                 dc_features_path, proposals_3d_path_override = _run_isbnet_backbone(

@@ -48,8 +48,8 @@ class ScanNetEval(object):
         dist_confs = [self.distance_confs[0]]
 
         # results: class x iou
-        ap = np.zeros((len(dist_threshes), len(self.eval_class_labels), len(ious)), np.float)
-        rc = np.zeros((len(dist_threshes), len(self.eval_class_labels), len(ious)), np.float)
+        ap = np.zeros((len(dist_threshes), len(self.eval_class_labels), len(ious)), float)
+        rc = np.zeros((len(dist_threshes), len(self.eval_class_labels), len(ious)), float)
         for di, (min_region_size, distance_thresh, distance_conf) in enumerate(
             zip(min_region_sizes, dist_threshes, dist_confs)
         ):
