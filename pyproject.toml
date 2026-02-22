@@ -54,6 +54,8 @@ dependencies = [
     "trimesh",
     "wandb",
     "yacs",
+    # External segmenter CLI
+    "tyro>=0.8.13",
 ]
 
 [tool.pixi.workspace]
@@ -82,6 +84,9 @@ pointnet2 = { path = "./segmenter3d/ISBNet/isbnet/pointnet2", editable = false }
 groundingdino = { path = "./segmenter2d/GroundingDINO", editable = false }
 segment-anything = { path = "./segmenter2d/segment_anything", editable = false }
 detectron2 = { git = "https://github.com/MaureenZOU/detectron2-xyz.git" }
+# External segmenter deps
+psdframe = { git = "ssh://git@github.com/DaveLearn/deg.git", tag="initializerdefs/v0.5.1", subdirectory = "packages/psdframe" }
+initializerdefs = { git = "ssh://git@github.com/DaveLearn/deg.git", subdirectory = "packages/initializerdefs", tag="initializerdefs/v0.5.1" }
 # clip = { git = "https://github.com/facebookresearch/ov-seg.git", subdirectory = "third_party/CLIP" }
 
 [tool.pixi.pypi-options]
@@ -94,3 +99,4 @@ CPATH = "${PIXI_PROJECT_ROOT}/.pixi/envs/default/include:${PIXI_PROJECT_ROOT}/.p
 CUDA_HOME = "${PIXI_PROJECT_ROOT}/.pixi/envs/default"
 
 [tool.pixi.tasks]
+segment_external = { cmd = "python segment.py", depends-on = [] }

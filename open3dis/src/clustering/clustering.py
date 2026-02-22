@@ -514,12 +514,31 @@ dc_feature_spp = None
 means_spp = None
 
 
-def process_hierarchical_agglomerative_nospp(scene_id, depht_thresh, post_filter, cfg):
+def process_hierarchical_agglomerative_nospp(
+    scene_id,
+    *args,
+    depht_thresh=None,
+    post_filter=None,
+    cfg=None,
+):
+    if cfg is None:
+        if len(args) == 0:
+            raise ValueError("cfg must be provided to process_hierarchical_agglomerative_nospp")
+        if len(args) == 1:
+            cfg = args[0]
+        else:
+            depht_thresh = args[0]
+            post_filter = args[1]
+            cfg = args[2]
     global num_instance, num_point, dc_feature_matrix, dc_feature_spp
 
     visi = cfg.cluster.visi
     simi = cfg.cluster.simi
     reca = cfg.cluster.recall
+    if depht_thresh is None:
+        depht_thresh = getattr(cfg.cluster, "depht_thresh", 0.2)
+    if post_filter is None:
+        post_filter = getattr(cfg.cluster, "post_filter", getattr(cfg.cluster, "point_visi", 0.2))
     iterative = cfg.cluster.iterative if hasattr(cfg.cluster, 'iterative') else True
 
     exp_path = os.path.join(cfg.exp.save_dir, cfg.exp.exp_name)
