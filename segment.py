@@ -756,7 +756,11 @@ def _build_open3dis_config(
 
 
 def _run_open3dis_pipeline(
-    project_root: Path, config_path: Path, work_dir: Path, debug_dir: Path
+    project_root: Path,
+    config_path: Path,
+    work_dir: Path,
+    debug_dir: Path,
+    scene_id: str,
 ) -> None:
     env = os.environ.copy()
     env["PYTHONWARNINGS"] = "ignore"
@@ -790,6 +794,16 @@ def _run_open3dis_pipeline(
             str(config_path),
         ]
     )
+
+    cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
+    grounded_feat_path = (
+        Path(cfg.exp.save_dir)
+        / cfg.exp.exp_name
+        / cfg.exp.grounded_feat_output
+        / f"{scene_id}.pth"
+    )
+    if grounded_feat_path.exists():
+        grounded_feat_path.unlink()
 
 
 def _ensure_clip_weights(config_path: Path) -> None:
@@ -1183,6 +1197,7 @@ def run() -> None:
             config_path=config_path,
             work_dir=output_dir,
             debug_dir=debug_dir,
+            scene_id=scene_id,
         )
 
         cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
