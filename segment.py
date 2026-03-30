@@ -115,18 +115,12 @@ def get_dataset_frame_from_observation_frame(observation_frame: ObservationFrame
         color=torch.tensor(observation_frame.color).cuda(),
         X_WV=torch.tensor(observation_frame.X_WV),
         K=torch.tensor(observation_frame.K),
-        depth=(
-            torch.tensor(observation_frame.depth).cuda()
-            if observation_frame.depth is not None
-            else None
-        ),
+        depth=(torch.tensor(observation_frame.depth).cuda() if observation_frame.depth is not None else None),
     )
 
 
 def _to_cam_open3d(frame: Frame) -> o3d.camera.PinholeCameraParameters:
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(
-        frame.w, frame.h, frame.fl_x, frame.fl_y, frame.cx, frame.cy
-    )
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(frame.w, frame.h, frame.fl_x, frame.fl_y, frame.cx, frame.cy)
     extrinsic = frame.X_VW_opencv.cpu().numpy()
     camera = o3d.camera.PinholeCameraParameters()
     camera.extrinsic = extrinsic
@@ -134,9 +128,7 @@ def _to_cam_open3d(frame: Frame) -> o3d.camera.PinholeCameraParameters:
     return camera
 
 
-def _post_process_mesh(
-    mesh: o3d.geometry.TriangleMesh, cluster_to_keep: int = 1000
-) -> o3d.geometry.TriangleMesh:
+def _post_process_mesh(mesh: o3d.geometry.TriangleMesh, cluster_to_keep: int = 1000) -> o3d.geometry.TriangleMesh:
     mesh_0 = copy.deepcopy(mesh)
     with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug):
         triangle_clusters, cluster_n_triangles, _ = mesh_0.cluster_connected_triangles()
@@ -183,24 +175,42 @@ def _extract_mesh_bounded(
         di = o3d.geometry.Image(depth)
         cam = _to_cam_open3d(frame)
 
-        rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-            ci, di, depth_trunc=depth_trunc, convert_rgb_to_intensity=False, depth_scale=1.0
-        )
+        rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(ci, di, depth_trunc=depth_trunc, convert_rgb_to_intensity=False, depth_scale=1.0)
         volume.integrate(rgbd, intrinsic=cam.intrinsic, extrinsic=cam.extrinsic)
 
     return volume.extract_triangle_mesh()
 
 
-def _extract_mesh_bounded_with_res(
-    frames: List[Frame], depth_trunc: float = 2, mesh_res: int = 1024
-) -> o3d.geometry.TriangleMesh:
+def _extract_mesh_bounded_with_res(frames: List[Frame], depth_trunc: float = 2, mesh_res: int = 1024) -> o3d.geometry.TriangleMesh:
     voxel_size = depth_trunc / mesh_res
     sdf_trunc = 5.0 * voxel_size
     raw_mesh = _extract_mesh_bounded(frames, voxel_size, sdf_trunc, depth_trunc)
     return _post_process_mesh(raw_mesh, cluster_to_keep=50)
 
 
-def get_workspace_voxels(scene: SceneSetup) -> o3d.geometry.VoxelGrid:
+def _erode_voxel_grid_xy(voxel_grid: o3d.geometry.VoxelGrid, layers: int) -> o3d.geometry.VoxelGrid:
+    if layers <= 0 or not voxel_grid.has_voxels():
+        return voxel_grid
+
+    voxel_indices = [tuple(int(idx) for idx in voxel.grid_index) for voxel in voxel_grid.get_voxels()]
+    xy_occupied = {(x, y) for x, y, _ in voxel_indices}
+
+    for _ in range(layers):
+        if not xy_occupied:
+            break
+        prev_xy = xy_occupied
+        xy_occupied = {
+            (x, y) for (x, y) in prev_xy if ((x - 1, y) in prev_xy and (x + 1, y) in prev_xy and (x, y - 1) in prev_xy and (x, y + 1) in prev_xy)
+        }
+
+    for voxel_index in voxel_indices:
+        if (voxel_index[0], voxel_index[1]) not in xy_occupied:
+            voxel_grid.remove_voxel(voxel_index)
+
+    return voxel_grid
+
+
+def get_workspace_voxels(scene: SceneSetup, shrink_xy_m: float = 0.1) -> o3d.geometry.VoxelGrid:
     table_xyz = scene.ground_gaussians.xyz
     table_plane = scene.ground_plane
     table_normal = np.array([table_plane[0], table_plane[1], table_plane[2]])
@@ -213,12 +223,13 @@ def get_workspace_voxels(scene: SceneSetup) -> o3d.geometry.VoxelGrid:
         new_points = table_xyz + table_normal * voxel_size * i
         table_pcd_extruded = np.append(table_pcd_extruded, new_points, axis=0)
     for i in range(5):
-        table_pcd_extruded = np.append(
-            table_pcd_extruded, table_xyz - table_normal * voxel_size * (i + 1), axis=0
-        )
+        table_pcd_extruded = np.append(table_pcd_extruded, table_xyz - table_normal * voxel_size * (i + 1), axis=0)
 
     pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(table_pcd_extruded))
-    return o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size * 2)
+    voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size * 2)
+
+    layers = max(0, int(np.round(shrink_xy_m / voxel_grid.voxel_size)))
+    return _erode_voxel_grid_xy(voxel_grid, layers)
 
 
 def _crop_mesh_to_workspace_bbox(
@@ -354,9 +365,7 @@ def _run_segmentator(ply_path: Path, k_thresh: float, seg_min_verts: int) -> Pat
         if segs_files:
             expected_output = segs_files[0]
         else:
-            raise RuntimeError(
-                f"Segmentator did not produce expected output {expected_output}"
-            )
+            raise RuntimeError(f"Segmentator did not produce expected output {expected_output}")
 
     logger.info("Superpoints saved to %s", expected_output)
     return expected_output
@@ -418,9 +427,7 @@ def _build_point_labels(masks: np.ndarray, confidences: Optional[np.ndarray]) ->
     return labels
 
 
-def _triangle_labels_from_vertices(
-    mesh: o3d.geometry.TriangleMesh, labels: np.ndarray
-) -> np.ndarray:
+def _triangle_labels_from_vertices(mesh: o3d.geometry.TriangleMesh, labels: np.ndarray) -> np.ndarray:
     triangles = np.asarray(mesh.triangles)
     tri_labels = labels[triangles]
     a = tri_labels[:, 0]
@@ -468,14 +475,10 @@ def _render_instance_id_masks(
             cx = float(k[0, 2])
             cy = float(k[1, 2])
 
-            u, v = np.meshgrid(
-                np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32)
-            )
+            u, v = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
             u = u + 0.5
             v = v + 0.5
-            dirs_cam = np.stack(
-                [(u - cx) / fx, (v - cy) / fy, np.ones_like(u)], axis=-1
-            )
+            dirs_cam = np.stack([(u - cx) / fx, (v - cy) / fy, np.ones_like(u)], axis=-1)
             dirs_cam = dirs_cam.reshape(-1, 3)
             dirs_cam /= np.linalg.norm(dirs_cam, axis=1, keepdims=True)
 
@@ -508,9 +511,7 @@ def _render_instance_id_masks(
     return _raycast_instance_id_masks(mesh_legacy, tri_labels, frames)
 
 
-def _get_instance_id_mask_for_frame(
-    instance_id: int, masks: Dict[str, np.ndarray], frame: Frame
-) -> torch.Tensor:
+def _get_instance_id_mask_for_frame(instance_id: int, masks: Dict[str, np.ndarray], frame: Frame) -> torch.Tensor:
     frame_mask = masks[frame.name]
     instance_mask = frame_mask == instance_id
     return torch.tensor(instance_mask, device=frame.color.device, dtype=torch.bool)
@@ -546,9 +547,7 @@ def determine_table_instance_id(
         points = points.reshape(4, h, w)
 
         a, b, c, d = table_plane
-        plane_dist = (a * points[0] + b * points[1] + c * points[2] + d) / math.sqrt(
-            a * a + b * b + c * c
-        )
+        plane_dist = (a * points[0] + b * points[1] + c * points[2] + d) / math.sqrt(a * a + b * b + c * c)
         table_mask = torch.abs(plane_dist) < 0.02
         table_mask = table_mask & valid_mask
 
@@ -714,9 +713,7 @@ def _build_open3dis_config(
     cfg["data"]["dataset_name"] = "scannetpp"
 
     if args.cls_agnostic_3d_proposals_path is not None:
-        cfg["data"]["cls_agnostic_3d_proposals_path"] = str(
-            args.cls_agnostic_3d_proposals_path
-        )
+        cfg["data"]["cls_agnostic_3d_proposals_path"] = str(args.cls_agnostic_3d_proposals_path)
     if args.dc_features_path is not None:
         cfg["data"]["dc_features_path"] = str(args.dc_features_path)
 
@@ -796,12 +793,7 @@ def _run_open3dis_pipeline(
     )
 
     cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
-    grounded_feat_path = (
-        Path(cfg.exp.save_dir)
-        / cfg.exp.exp_name
-        / cfg.exp.grounded_feat_output
-        / f"{scene_id}.pth"
-    )
+    grounded_feat_path = Path(cfg.exp.save_dir) / cfg.exp.exp_name / cfg.exp.grounded_feat_output / f"{scene_id}.pth"
     if grounded_feat_path.exists():
         grounded_feat_path.unlink()
 
@@ -1084,7 +1076,6 @@ def run() -> None:
             logger.info("Dataset has no id, using transient id")
             dataset.id = f"transient_{time.strftime('%Y%m%d-%H%M%S')}"
 
-
         scene_id = _sanitize_scene_id(dataset.id)
         project_root = Path(__file__).resolve().parent
         if args.output_dir is None:
@@ -1206,12 +1197,7 @@ def run() -> None:
             if mask2d_path.exists():
                 mask_data = torch.load(mask2d_path)
                 dbg.save_masks_2d(frames, mask_data)
-        cluster_path = (
-            Path(cfg.exp.save_dir)
-            / cfg.exp.exp_name
-            / cfg.exp.clustering_3d_output
-            / f"{scene_id}.pth"
-        )
+        cluster_path = Path(cfg.exp.save_dir) / cfg.exp.exp_name / cfg.exp.clustering_3d_output / f"{scene_id}.pth"
         if not cluster_path.exists():
             raise RuntimeError(f"Open3DIS output missing: {cluster_path}")
 
