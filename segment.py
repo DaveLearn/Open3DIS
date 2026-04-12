@@ -250,6 +250,32 @@ def _crop_mesh_to_workspace_bbox(
     return mesh.crop(aabb)
 
 
+def _crop_mesh_to_workspace(
+    mesh: o3d.geometry.TriangleMesh,
+    workspace_voxels: o3d.geometry.VoxelGrid,
+) -> o3d.geometry.TriangleMesh:
+    if not mesh.has_triangles() or not mesh.has_vertices() or not workspace_voxels.has_voxels():
+        return mesh
+
+    vertices = np.asarray(mesh.vertices)
+    triangles = np.asarray(mesh.triangles)
+    if len(vertices) == 0 or len(triangles) == 0:
+        return mesh
+
+    in_workspace = np.asarray(
+        workspace_voxels.check_if_included(o3d.utility.Vector3dVector(vertices)),
+        dtype=bool,
+    )
+    keep_triangles = in_workspace[triangles].all(axis=1)
+
+    if keep_triangles.all():
+        return mesh
+
+    mesh.remove_triangles_by_mask(~keep_triangles)
+    mesh.remove_unreferenced_vertices()
+    return mesh
+
+
 def _filter_labels_by_workspace(
     vertices: np.ndarray,
     labels: np.ndarray,
@@ -1099,7 +1125,9 @@ def run() -> None:
         workspace_voxels = get_workspace_voxels(scene)
         dbg.save_workspace_voxels(workspace_voxels)
         mesh = _crop_mesh_to_workspace_bbox(mesh, workspace_voxels)
-        logger.info("Cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
+        logger.info("BBox-cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
+        mesh = _crop_mesh_to_workspace(mesh, workspace_voxels)
+        logger.info("Workspace-cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
         dbg.save_mesh(mesh, filename="mesh_tsdf_cropped.ply")
 
         data_root = project_root / "data"
