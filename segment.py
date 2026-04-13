@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import os
+import random
 import subprocess
 import sys
 import time
@@ -55,6 +56,7 @@ SAM_CHECKPOINT_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_
 SAM_CHECKPOINT_FILENAME = "sam_vit_h_4b8939.pth"
 GROUNDING_DINO_URL = "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"
 RAM_PLUS_URL = "https://huggingface.co/xinyu1205/recognize-anything-plus-model/resolve/main/ram_plus_swin_large_14m.pth"
+DEFAULT_SEED = 0
 
 
 @dataclass
@@ -1085,10 +1087,19 @@ def run() -> None:
 
     args = tyro.cli(Args)
 
+    random.seed(DEFAULT_SEED)
+    np.random.seed(DEFAULT_SEED)
+    torch.manual_seed(DEFAULT_SEED)
+    torch.cuda.manual_seed_all(DEFAULT_SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
+
     with contextlib.redirect_stdout(sys.stderr):
         logger.info("--------------")
         logger.info("Starting Open3DIS initialization")
         logger.info("params: %s", args)
+        logger.info("Determinism enabled with seed=%d", DEFAULT_SEED)
 
         logger.info("Loading observations from %s", args.observations_path)
         dataset: Observations = Observations.load(args.observations_path)
