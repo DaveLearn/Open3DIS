@@ -98,6 +98,7 @@ detectron2 = { git = "https://github.com/MaureenZOU/detectron2-xyz.git" }
 # External segmenter deps
 psdframe = { path = "../../packages/psdframe", editable = true }
 initializerdefs = { path = "../../packages/initializerdefs", editable = true }
+psdstaticdataset = { path = "../../packages/psdstaticdataset", editable = true }
 # clip = { git = "https://github.com/facebookresearch/ov-seg.git", subdirectory = "third_party/CLIP" }
 
 [tool.pixi.pypi-options]
