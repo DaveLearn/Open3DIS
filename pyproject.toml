@@ -96,8 +96,8 @@ segment-anything = { path = "./segmenter2d/segment_anything", editable = false }
 ram = { path = "./segmenter2d/recognize-anything", editable = false }
 detectron2 = { git = "https://github.com/MaureenZOU/detectron2-xyz.git" }
 # External segmenter deps
-psdframe = { git = "ssh://git@github.com/DaveLearn/deg.git", tag="initializerdefs/v0.5.2", subdirectory = "packages/psdframe" }
-initializerdefs = { git = "ssh://git@github.com/DaveLearn/deg.git", subdirectory = "packages/initializerdefs", tag="initializerdefs/v0.5.2" }
+psdframe = { path = "../../packages/psdframe", editable = true }
+initializerdefs = { path = "../../packages/initializerdefs", editable = true }
 # clip = { git = "https://github.com/facebookresearch/ov-seg.git", subdirectory = "third_party/CLIP" }
 
 [tool.pixi.pypi-options]
