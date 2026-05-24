@@ -41,6 +41,7 @@ from initializerdefs import (
     Observations,
     ObservationFrame,
     SceneSetup,
+    get_mesh_path_for_transforms,
     load_observations_from_transforms_path,
 )
 from psdframe import Frame
@@ -1132,18 +1133,16 @@ def run() -> None:
         frames = [get_dataset_frame_from_observation_frame(f) for f in dataset.frames]
         dbg.save_frames(frames)
 
-        logger.info("Reconstructing TSDF mesh")
-        mesh = _extract_mesh_bounded_with_res(frames, depth_trunc=2, mesh_res=1024)
+        mesh_path = get_mesh_path_for_transforms(args.transforms_path)
+        if not mesh_path.exists():
+            raise FileNotFoundError(f"Mesh not found at {mesh_path}")
+        logger.info("Loading mesh from %s", mesh_path)
+        mesh = o3d.io.read_triangle_mesh(str(mesh_path))
         logger.info("Mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
         dbg.save_mesh(mesh)
 
         workspace_voxels = get_workspace_voxels(scene)
         dbg.save_workspace_voxels(workspace_voxels)
-        mesh = _crop_mesh_to_workspace_bbox(mesh, workspace_voxels)
-        logger.info("BBox-cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
-        mesh = _crop_mesh_to_workspace(mesh, workspace_voxels)
-        logger.info("Workspace-cropped mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
-        dbg.save_mesh(mesh, filename="mesh_tsdf_cropped.ply")
 
         data_root = project_root / "data"
         data_root.mkdir(parents=True, exist_ok=True)
