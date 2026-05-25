@@ -1313,7 +1313,10 @@ def run() -> None:
             pixel_object_ids=pixel_masks,
         )
 
-        objects = ObjectSegmentations(object_segmentations=instance_mask_objects)
+        objects = ObjectSegmentations(
+            object_segmentations=instance_mask_objects,
+            mesh_vertex_instance_ids=vertex_labels_filtered,
+        )
         if dbg.enabled:
             dbg.save_pixel_masks(frames, instance_groups)
         output_path = output_dir / "objectsdef.pkl"
