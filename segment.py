@@ -1144,7 +1144,7 @@ def run() -> None:
         workspace_voxels = get_workspace_voxels(scene)
         dbg.save_workspace_voxels(workspace_voxels)
 
-        data_root = project_root / "data"
+        data_root = output_dir / "data"
         data_root.mkdir(parents=True, exist_ok=True)
         _reset_open3dis_data_root(data_root, args.dataset_mode)
         split_3d = "test"
