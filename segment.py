@@ -43,6 +43,10 @@ from initializerdefs import (
     SceneSetup,
     get_mesh_path_for_transforms,
     load_observations_from_transforms_path,
+    runtime_start,
+    runtime_stop,
+    runtime_pause,
+    runtime_resume,
 )
 from psdframe import Frame
 
@@ -1129,6 +1133,11 @@ def run() -> None:
         debug_dir = output_dir / "debug"
         dbg = DebugVisualizer(debug_dir)
 
+        # NB: Open3DIS runs ISBNet + its 2D foundation models in subprocesses, so their
+        # in-subprocess model loads cannot be excluded from this level and are counted as
+        # compute; only the weight ensure/download step below is paused out.
+        _rt = runtime_start("open3dis", scene=dataset.id, n_frames=len(dataset.frames))
+
         logger.info("Converting %d observation frames", len(dataset.frames))
         frames = [get_dataset_frame_from_observation_frame(f) for f in dataset.frames]
         dbg.save_frames(frames)
@@ -1220,9 +1229,11 @@ def run() -> None:
                     output_dir=output_dir,
                 )
 
+        runtime_pause(_rt)  # exclude weight/checkpoint ensure+download from the timed compute
         _ensure_clip_weights(config_path)
         _ensure_nltk_data(project_root)
         _ensure_foundation_checkpoints(config_path, project_root)
+        runtime_resume(_rt)
 
         logger.info("Running Open3DIS pipeline")
         _run_open3dis_pipeline(
@@ -1280,8 +1291,12 @@ def run() -> None:
                 if np.any(mask == lbl):
                     frame_counts[lbl] += 1
 
-        valid_ids = np.array([lbl for lbl, cnt in frame_counts.items() if cnt >= 3])
-        logger.info("Labels in >= 3 frames: %d / %d", len(valid_ids), len(all_label_ids))
+        # The usual rule is >=3, but with only 3 views that demands the object
+        # appear in *every* frame, which is too strict, so relax to >=2 when there
+        # are <=3 views.
+        min_frame_count = 2 if len(frames) <= 3 else 3
+        valid_ids = np.array([lbl for lbl, cnt in frame_counts.items() if cnt >= min_frame_count])
+        logger.info("Labels in >= %d frames: %d / %d", min_frame_count, len(valid_ids), len(all_label_ids))
 
         for name in instance_groups:
             instance_groups[name][~np.isin(instance_groups[name], valid_ids)] = 0
@@ -1317,6 +1332,7 @@ def run() -> None:
             object_segmentations=instance_mask_objects,
             mesh_vertex_instance_ids=vertex_labels_filtered,
         )
+        runtime_stop(_rt)
         if dbg.enabled:
             dbg.save_pixel_masks(frames, instance_groups)
         output_path = output_dir / "objectsdef.pkl"
