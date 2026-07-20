@@ -50,7 +50,6 @@ from initializerdefs import (
 )
 from psdframe import Frame
 
-from helpers.debug_visualize import DebugVisualizer
 
 
 logger = logging.getLogger("open3dis-segmenter")
@@ -1131,7 +1130,6 @@ def run() -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         debug_dir = output_dir / "debug"
-        dbg = DebugVisualizer(debug_dir)
 
         # NB: Open3DIS runs ISBNet + its 2D foundation models in subprocesses, so their
         # in-subprocess model loads cannot be excluded from this level and are counted as
@@ -1140,7 +1138,6 @@ def run() -> None:
 
         logger.info("Converting %d observation frames", len(dataset.frames))
         frames = [get_dataset_frame_from_observation_frame(f) for f in dataset.frames]
-        dbg.save_frames(frames)
 
         mesh_path = get_mesh_path_for_transforms(args.transforms_path)
         if not mesh_path.exists():
@@ -1148,10 +1145,8 @@ def run() -> None:
         logger.info("Loading mesh from %s", mesh_path)
         mesh = o3d.io.read_triangle_mesh(str(mesh_path))
         logger.info("Mesh has %d vertices, %d triangles", len(mesh.vertices), len(mesh.triangles))
-        dbg.save_mesh(mesh)
 
         workspace_voxels = get_workspace_voxels(scene)
-        dbg.save_workspace_voxels(workspace_voxels)
 
         data_root = output_dir / "data"
         data_root.mkdir(parents=True, exist_ok=True)
@@ -1168,15 +1163,6 @@ def run() -> None:
             k_thresh=args.k_thresh,
             seg_min_verts=args.seg_min_verts,
         )
-        if dbg.enabled:
-            superpoints_path = superpoints_dir / f"{scene_id}.pth"
-            if superpoints_path.exists():
-                superpoints = torch.load(superpoints_path)
-                if hasattr(superpoints, "cpu"):
-                    superpoints = superpoints.cpu().numpy()
-                else:
-                    superpoints = np.array(superpoints)
-                dbg.save_superpoints(mesh, superpoints)
 
         exp_dir = output_dir / "open3dis_exp"
         exp_dir.mkdir(parents=True, exist_ok=True)
@@ -1245,11 +1231,6 @@ def run() -> None:
         )
 
         cfg = Munch.fromDict(yaml.safe_load(config_path.read_text()))
-        if dbg.enabled:
-            mask2d_path = Path(cfg.exp.save_dir) / cfg.exp.exp_name / cfg.exp.mask2d_output / f"{scene_id}.pth"
-            if mask2d_path.exists():
-                mask_data = torch.load(mask2d_path)
-                dbg.save_masks_2d(frames, mask_data)
         cluster_path = Path(cfg.exp.save_dir) / cfg.exp.exp_name / cfg.exp.clustering_3d_output / f"{scene_id}.pth"
         if not cluster_path.exists():
             raise RuntimeError(f"Open3DIS output missing: {cluster_path}")
@@ -1273,8 +1254,6 @@ def run() -> None:
             raise RuntimeError("Open3DIS produced no instance masks")
 
         labels = _build_point_labels(masks, conf)
-        if dbg.enabled:
-            dbg.save_segmented_mesh(mesh, labels)
         mesh_vertices = np.asarray(mesh.vertices).astype(np.float32)
         labels = _filter_labels_by_workspace(mesh_vertices, labels, workspace_voxels)
 
@@ -1308,8 +1287,6 @@ def run() -> None:
 
         vertex_labels_filtered = labels.copy()
         vertex_labels_filtered[~np.isin(vertex_labels_filtered, valid_ids)] = 0
-        if dbg.enabled:
-            dbg.save_filtered_mesh(mesh, labels, vertex_labels_filtered, table_id, valid_ids)
 
         frame_ids: List[int] = []
         pixel_masks: List[np.ndarray] = []
@@ -1331,8 +1308,6 @@ def run() -> None:
             mesh_vertex_instance_ids=vertex_labels_filtered,
         )
         runtime_stop(_rt)
-        if dbg.enabled:
-            dbg.save_pixel_masks(frames, instance_groups)
         output_path = output_dir / "objectsdef.pkl"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         objects.save(output_path)

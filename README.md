@@ -108,15 +108,33 @@ Notes:
   Open3DIS with the generated `dc_features` and proposals.
 - If no `--isbnet-checkpoint` is provided, the wrapper will auto-download the
   ScanNet200 ISBNet checkpoint to `pretrains/isbnet/isbnet_scannet200.pth`.
-- Debugging: set `OPEN3DIS_DEBUG=1` to save intermediate artifacts under
-  `<output_dir>/debug` (frames, meshes, superpoints, 2D masks, and
-  back-projected pixel masks).
 
 Local data layout:
 
 - All generated data and checkpoints are stored under `data/` and
   `pretrains/` inside the Open3DIS repo. Add those paths to `.gitignore`
   as needed.
+
+### Changes from upstream
+
+This fork adapts the original [Open3DIS](https://open3dis.github.io/) code to
+run as a DEG external segmenter. Notable differences from upstream:
+
+- **Packaging with [pixi](https://pixi.sh)**: reproducible environment via
+  `pyproject.toml` + `pixi.lock`; the segmenter is exposed as the
+  `segment_external` task (`pixi run segment_external ...`).
+- **`segment.py` wrapper**: new entry point that converts DEG mesh/workspace
+  observations into ScanNet-like inputs, drives Open3DIS (optionally ISBNet
+  for 3D proposals / deep features), and writes back instance segmentations.
+- **Compatibility fixes** for modern toolchains:
+  - numpy dtype deprecations (`np.float`/`np.bool` → `float`/`bool`).
+  - `find_packages()` packaging for ISBNet so submodules install correctly.
+  - `os.makedirs(..., exist_ok=True)` before writing checkpoint / feature files.
+  - Lazy imports of the 2D foundation models so unused backends aren't required.
+  - Environment-configurable 2D tracker path (`TRACKER_2D_PATH`) for per-run
+    isolation.
+  - Optional `pyviz3d` import (visualization-only dependency).
+  - CUDA / `int64` fix in hierarchical clustering.
 
 <!-- ## TODO
 Status | Name | Date
