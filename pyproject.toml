@@ -111,4 +111,5 @@ CPATH = "${PIXI_PROJECT_ROOT}/.pixi/envs/default/include:${PIXI_PROJECT_ROOT}/.p
 CUDA_HOME = "${PIXI_PROJECT_ROOT}/.pixi/envs/default"
 
 [tool.pixi.tasks]
-segment_external = { cmd = "python segment.py", depends-on = [] }
+build_isbnet_ops = { cmd = "cd segmenter3d/ISBNet && python setup.py build_ext --inplace", inputs = ["segmenter3d/ISBNet/setup.py", "segmenter3d/ISBNet/isbnet/ops/src/**"], outputs = ["segmenter3d/ISBNet/isbnet/ops/ops*.so"] }
+segment_external = { cmd = "python segment.py", depends-on = ["build_isbnet_ops"] }
